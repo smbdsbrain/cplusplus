@@ -1,9 +1,18 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
+#include <random>
 
 using namespace std;
 
+
+#define PLUS     0
+#define MINUS 1
+#define MULTIPLY 2
+#define DEVIDE 3
+#define REMAINDER 4
+
+typedef pair<int, int> pipeline_action;
 
 class Var {
 private:
@@ -15,6 +24,11 @@ public:
 
 	int get_value() {
 		return value;
+	}
+
+	int set_value(int new_value) {
+		this->value = new_value;
+		return this->value;
 	}
 
 	Var operator+(const Var& b) {
@@ -34,6 +48,7 @@ public:
     }
 protected:
 };
+
 
 class Action {
 private:
@@ -56,6 +71,8 @@ public:
 	}
 protected:	
 };
+
+typedef pair<double, Action*> action_with_probability;
 
 class Per : public Action {
 private:
@@ -134,28 +151,148 @@ public:
 	}
 
 	void run() {
-
+		while(val->get_value() != 0) {
+			action->run();
+		}
 	}
 protected:	
 };
 
 class Select : public Action {
 private:
+	vector<action_with_probability> actioins_list;
 public:
-	void run() {
 
+	Select() {
+	}
+
+	Select add(Action *val, double probability) {
+		actioins_list.push_back(action_with_probability(probability, val));
+		return *this;
+	}
+
+	void run() {
+		int sz = actioins_list.size();
+		double *accumulated_probability = new double[sz];
+		accumulated_probability[0] = actioins_list[0].first;
+		for(int i = 1; i < sz; i++)
+			accumulated_probability[i] = accumulated_probability[i-1] + actioins_list[i].first;
+
+		double t = (rand() % ((int)(accumulated_probability[sz - 1] * 100))) / 100.0;
+		int position = lower_bound(accumulated_probability, accumulated_probability + sz, t) - accumulated_probability;
+		actioins_list[position].second->run();
 	}
 protected:	
 };
+
+
+class Assignable  {
+private:
+public:
+
+	virtual int value(int start_value){return 0;};
+protected:
+};
+
+
+class Random : public Assignable {
+private:
+	int start;
+	int end;
+public:
+
+	Random(int start, int end) {
+		this->start = start;
+		this->end = end;
+	}
+
+	int value(int start_value) {
+		return rand() % (end - start) + start;
+	}
+
+protected:
+};
+
+
+class Integer : public Assignable {
+private:
+	vector<pipeline_action> generate_pipeline;
+public:
+
+	Integer operator+(int b) {
+		generate_pipeline.push_back(pipeline_action(PLUS, b));
+		return *this;
+    }
+
+    Integer operator-(int b) {
+    	generate_pipeline.push_back(pipeline_action(MINUS, b));
+		return *this;
+    }
+
+    Integer operator*(int b) {
+    	generate_pipeline.push_back(pipeline_action(MULTIPLY, b));
+		return *this;
+    }
+
+    Integer operator/(int b) {
+    	generate_pipeline.push_back(pipeline_action(DEVIDE, b));
+		return *this;
+    }
+
+    Integer operator%(int b) {
+    	generate_pipeline.push_back(pipeline_action(REMAINDER, b));
+		return *this;
+    }
+
+    int value(int start_value) {
+    	for(int i = 0; i < generate_pipeline.size(); i++) {
+    		switch(generate_pipeline[i].first) {
+
+    			case PLUS:
+    				start_value += generate_pipeline[i].second;
+    			break;
+
+    			case MINUS:
+    				start_value -= generate_pipeline[i].second;
+    			break;
+
+    			case MULTIPLY:
+    				start_value *= generate_pipeline[i].second;
+    			break;
+    			
+    			case DEVIDE:
+    				start_value /= generate_pipeline[i].second;
+    			break;
+
+    			case REMAINDER:
+    				start_value %= generate_pipeline[i].second;
+    			break;
+    		}
+    	}
+    	return start_value;
+    }
+
+protected:
+};
+
 
 class Assign : public Action {
 private:
+	Var *var;
+	Assignable *assignable;
 public:
-	void run() {
 
+	Assign(Var *var, Assignable *assignable) {
+		this->var = var;
+		this->assignable = assignable;
+	}
+
+	void run() {
+		var->set_value(assignable->value(var->get_value()));
 	}
 protected:	
 };
+
 
 class Seq {
 private:
